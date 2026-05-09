@@ -1,0 +1,214 @@
+html{
+    font-size: 62.5%;
+}
+
+body{
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    font-family: Inter, sans-serif;
+    background: linear-gradient(-90deg,#121212, #171717);
+    color: #fff;
+    min-height: 100vh;
+    font-size: 1.6rem;
+}
+
+body * {
+    box-sizing: border-box;
+}
+
+textarea{
+    resize: vertical;
+}
+
+main {
+    flex: 1;
+    display: flex;
+    padding: 2rem;
+    gap: 3rem;
+}
+
+#graph-wrapper {
+    width: 100%;
+    height: 88vh;
+    border: 0.2rem solid white;
+    border-radius: 0.5rem;
+}
+
+.graph-stats {
+    display: flex;
+    flex-direction: column;
+    gap: 5rem;
+}
+
+.stat-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+#edges-list {
+    position: relative;
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    overflow-y: auto;
+    max-height: 75vh;
+}
+
+#edges-list::-webkit-scrollbar {
+    display: none;
+}
+
+
+#edges-list {
+    -ms-overflow-style: none;
+    scrollbar-width: none; 
+}
+
+#edges-list::after {
+    content: "";
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 3rem;
+    background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(0,0,0,0.5));
+    pointer-events: none;
+}
+
+#edges-list.no-gradient::after {
+    display: none;
+}
+
+.edge {
+    position: relative;
+    display: flex;
+}
+
+.edge-label {
+    background-color: #292929;
+    width: 3rem;
+    text-align: center;
+}
+
+.edge-input {
+    outline: none;
+}
+
+.input-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.input-wrapper input {
+    outline: none;
+    width: 100%;
+}
+
+i.fas {
+    position: absolute;
+    right: 1rem;
+    color: red;
+    cursor: help;
+    visibility: hidden;
+}
+
+.edge .fas {
+    right: 3.5rem;
+    align-self: center;
+}
+
+#output-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+    max-width: 18%;
+    min-width: 18%;
+    padding-bottom: 0.5rem;
+}
+
+.algorithm-input-wrapper {
+    display: flex;
+    flex-direction: column;
+}
+
+#algorithm-output {
+    color: white;
+    height: 100%;
+    background-color: #292929;
+    padding: 1rem;
+    box-shadow: 0rem 0.8rem 1.6rem 0rem rgba(0,0,0,0.2);
+    overflow-y: auto;
+    width: 100%;
+}
+
+#graph-wrapper {
+    position: relative; /* Ensure this is set to relative for absolute positioning inside */
+}
+
+#legend {
+    position: absolute;
+    bottom: 4rem;
+    right: 36rem;
+    background-color: rgba(41, 41, 41, 0.8);
+    opacity: 80%;
+    padding: 1rem;
+    border-radius: 0.5rem;
+    border: 1px solid #ccc;
+    z-index: 1000;
+    color: white;
+    font-size: 0.8em;
+}
+
+#legend ul {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    font-size: 1.5rem;
+    list-style: none;
+    padding: 0 1rem 0 1rem;
+}
+
+#legend h3 {
+    margin-top: 0.5rem;
+    font-size: 1.6rem;
+}
+
+#legend ul li {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 1rem;
+}
+
+.legend-icon {
+    height: 1.5rem;
+    width: 1.5rem;
+    display: inline-block;
+    border-radius: 50%;
+    margin-right: 0.5rem;
+}
+
+.candidate { background-color: yellow; }
+.path { background-color: #90EE90; }
+.start { background-color: darkgreen; }
+.cannot { background-color: red; }
+
+#buttons-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: 0.8rem;
+}
+
+#output-wrapper button:hover {
+    cursor:pointer;
+    opacity: 0.8;
+}
+
+@media screen and (min-height: 1000px) {
+    #legend {
+        bottom: 5.5rem;
+    }
+  }

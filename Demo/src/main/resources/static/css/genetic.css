@@ -1,0 +1,21 @@
+#genetic-link {
+    color: #939393;
+}
+
+#output-wrapper {
+    gap: 1.2rem;
+}
+
+#generate-parameters-btn:hover {
+    cursor:pointer;
+    opacity: 0.8;
+}
+
+.algorithm-input-wrapper {
+    position: relative;
+}
+
+.input-warning {
+    right: 2.5rem !important;
+    bottom: 0.3rem !important;
+}

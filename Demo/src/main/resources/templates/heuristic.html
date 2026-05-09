@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Home</title>
+    <link rel="stylesheet" href="/css/base.css">
+    <link rel="stylesheet" href="/css/heuristic.css">
+    <link rel="stylesheet" href="/css/header.css">
+    <link rel="stylesheet" href="/css/random-modal.css">
+    <link href="https://unpkg.com/vis-network/dist/vis-network.min.css" rel="stylesheet" type="text/css" />
+    <script defer type="text/javascript" src="https://unpkg.com/vis-network/dist/vis-network.min.js"></script>
+    <script src="https://kit.fontawesome.com/11ce54f9ae.js" crossorigin="anonymous"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <script defer src="/js/base.js"></script>
+    <script defer src="/js/graphViewer.js"></script>
+    <script defer src="/js/random-modal.js"></script>
+    <script defer src="/js/heuristic.js"></script>
+    <script defer src="/js/constants.js"></script>
+</head>
+<body>
+    <header>
+        <nav>
+            <div class="logo-wrapper">
+                <a href="/">Demo</a>
+            </div>
+            <div class="actions-wrapper">
+                <a href="exact" id="exact-link">Exact</a>
+                <a href="heuristic" id="heuristic-link">Heuristic</a>
+                <a href="genetic" id="genetic-link">Genetic</a>
+            </div>
+            <div class="import-wrapper">
+                <button class="dropbtn">Import</button>
+                <div class="dropdown-content">
+                    <button id="random-button">Random</button>
+                    <input type="file" id="file-input" accept=".graphml" style="display: none;" />
+                    <button id="graphml-button">GraphML</button>
+                </div>
+            </div>
+        </nav>
+    </header>
+    <main>
+        <div class="graph-stats">
+            <div class="stat-wrapper">
+                <label for="num-nodes-input">Nodes count</label>
+                <div class="input-wrapper">
+                    <input type="text" id="num-nodes-input" value="1">
+                    <i class="fas fa-exclamation-circle" title="Invalid number of nodes"></i>
+                </div>
+            </div>
+            <div class="stat-wrapper">
+                <label>Graph edges</label>
+                <ul id="edges-list" class="edges-container">
+                    <li class="edge">
+                        <label class="edge-label">1</label>
+                        <input type="text" class="edge-input">
+                        <i class="fas fa-exclamation-circle" title="Invalid edge! Example of valid edge: 2-3"></i>
+                        <button class="edge-delete-button">X</button>
+                    </li>
+                </ul>
+            </div>
+        </div>
+        <div id="graph-wrapper"></div>
+        <div id="legend">
+            <h3>Legend</h3>
+            <ul>
+                <li><span class="legend-icon start"></span> Starting Vertex</li>
+                <li><span class="legend-icon path"></span> Part of the Path</li>
+                <li><span class="legend-icon candidate"></span> Candidate</li>
+                <li><span class="legend-icon cannot"></span> Invalid Vertex</li>
+            </ul>
+        </div>
+        <div id="output-wrapper">
+            <div class="algorithm-input-wrapper">
+                <label>Execution Delay (ms)</label>
+                <input type="number" class="algorithm-input" id="delay-input" value="1000">
+            </div>
+            <div class="algorithm-input-wrapper">
+                <label>Maximum number of paths (per node)</label>
+                <input type="number" class="algorithm-input" id="maximum-paths-input" value="100">
+            </div>
+            <textarea id="algorithm-output">No algorithm currently running.</textarea>
+            <div id="buttons-wrapper">
+                <button id="visualize-algorithm-btn">Visualize algorithm</button>
+                <button id="run-algorithm-btn">Run algorithm</button>
+            </div>
+        </div>
+    </main>
+    <div id="myModal" class="modal">
+        <div class="modal-content">
+            <form id="graphForm">
+                <h1>Random graph</h1>
+                <div class="modal-input-wrapper">
+                    <label for="nodes">Number of Nodes:</label>
+                    <input type="number" id="nodes" name="nodes" required>
+                </div>
+
+                <div class="modal-input-wrapper">
+                    <label for="edges">Number of Edges:</label>
+                    <input type="number" id="edges" name="edges" required>
+                </div>
+
+                <div class="form-buttons">
+                    <button type="button" class="cancel-btn">Cancel</button>
+                    <button type="submit" class="submit-btn">Submit</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</body>
+</html>
