@@ -10,6 +10,7 @@ import org.graph4j.util.Path;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Random;
 
@@ -31,12 +32,19 @@ public class LongestInducedPathGenetic extends GraphAlgorithm implements Induced
     private final double RANDOM_MUTATION_RATE;
     private final double PROB_CROSSOVER;
     private final double SELECTION_PRESSURE;
+    private final GeneticAlgorithmConfig.SelectionMode SELECTION_MODE;
+    private final int TOURNAMENT_SIZE;
+    private final boolean[] INITIAL_SEED;
+    private final int[] PREFERRED_START_VERTICES;
+    private final boolean MEMETIC_LOCAL_SEARCH;
+    private final int MEMETIC_TOP_K;
     private final int numVertices;
     private int currentGeneration = 0;
     private int lastFoundImprovement = 0;
     private boolean[] bestIndividual;
     private double bestValue = 0;
     private final Random random = new Random();
+    private Path sharedPath;
 
     private final GeneticAlgorithmConfig config;
 
@@ -59,6 +67,12 @@ public class LongestInducedPathGenetic extends GraphAlgorithm implements Induced
         RANDOM_MUTATION_RATE = geneticAlgorithmConfig.getRandomMutationRate();
         PROB_CROSSOVER = geneticAlgorithmConfig.getProbabilityCrossover();
         SELECTION_PRESSURE = geneticAlgorithmConfig.getSelectionPressure();
+        SELECTION_MODE = geneticAlgorithmConfig.getSelectionMode();
+        TOURNAMENT_SIZE = geneticAlgorithmConfig.getTournamentSize();
+        INITIAL_SEED = geneticAlgorithmConfig.getInitialSeed();
+        PREFERRED_START_VERTICES = geneticAlgorithmConfig.getPreferredStartVertices();
+        MEMETIC_LOCAL_SEARCH = geneticAlgorithmConfig.isMemeticLocalSearch();
+        MEMETIC_TOP_K = geneticAlgorithmConfig.getMemeticTopK();
         numVertices = graph.numVertices();
     }
 
@@ -80,7 +94,18 @@ public class LongestInducedPathGenetic extends GraphAlgorithm implements Induced
         RANDOM_MUTATION_RATE = geneticAlgorithmConfig.getRandomMutationRate();
         PROB_CROSSOVER = geneticAlgorithmConfig.getProbabilityCrossover();
         SELECTION_PRESSURE = geneticAlgorithmConfig.getSelectionPressure();
+        SELECTION_MODE = geneticAlgorithmConfig.getSelectionMode();
+        TOURNAMENT_SIZE = geneticAlgorithmConfig.getTournamentSize();
+        INITIAL_SEED = geneticAlgorithmConfig.getInitialSeed();
+        PREFERRED_START_VERTICES = geneticAlgorithmConfig.getPreferredStartVertices();
+        MEMETIC_LOCAL_SEARCH = geneticAlgorithmConfig.isMemeticLocalSearch();
+        MEMETIC_TOP_K = geneticAlgorithmConfig.getMemeticTopK();
         numVertices = graph.numVertices();
+    }
+
+    public LongestInducedPathGenetic(GeneticAlgorithmConfig geneticAlgorithmConfig, Path sharedPath) {
+        this(geneticAlgorithmConfig);
+        this.sharedPath = sharedPath;
     }
 
     /**
@@ -102,7 +127,7 @@ public class LongestInducedPathGenetic extends GraphAlgorithm implements Induced
      */
 
     private void inducedPathsFromVertex(int startVertex, int currentVertex, boolean[] temp, int tempSize, boolean[] individual, int[] individualSize, int[] validVertices, int[] numberOfPaths, int maximumNumberOfPaths, int maximumNumberOfPathsBackwards, int[] lastImprov, boolean[] truncated, boolean backwards) {
-        if(truncated[0])
+        if(truncated[0] || Thread.currentThread().isInterrupted())
             return;
 
         validVertices[currentVertex]++;
@@ -196,7 +221,53 @@ public class LongestInducedPathGenetic extends GraphAlgorithm implements Induced
     List<boolean[]> generateStartingPopulation() {
         List<boolean[]> population = new ArrayList<>();
 
-        for(int i = 0; i < POP_SIZE; i++) {
+        if (INITIAL_SEED != null) {
+            int seedCopies = Math.max(1, POP_SIZE / 10);
+            for (int i = 0; i < seedCopies; i++) {
+                boolean[] copy = Arrays.copyOf(INITIAL_SEED, INITIAL_SEED.length);
+                if (i > 0) {
+                    boostIndividual(copy);
+                }
+                population.add(copy);
+            }
+        }
+
+        if (PREFERRED_START_VERTICES != null && PREFERRED_START_VERTICES.length > 0) {
+            int seeded = Math.min(POP_SIZE / 5, PREFERRED_START_VERTICES.length);
+            for (int i = 0; i < seeded; i++) {
+                boolean[] individual = new boolean[numVertices];
+                int[] validVertices = new int[numVertices];
+                int startVertex = PREFERRED_START_VERTICES[i % PREFERRED_START_VERTICES.length];
+                validVertices[startVertex] = 1;
+                inducedPathsFromVertex(startVertex, startVertex, new boolean[numVertices], 0, individual, new int[1], validVertices, new int[1], 100, 20, new int[1], new boolean[1], false);
+                population.add(individual);
+            }
+        } else {
+            int[] degrees = new int[numVertices];
+            for (int v = 0; v < numVertices; v++) {
+                degrees[v] = graph.neighbors(v).length;
+            }
+            List<Integer> verticesByDegree = new ArrayList<>();
+            for (int v = 0; v < numVertices; v++) verticesByDegree.add(v);
+            verticesByDegree.sort((a, b) -> degrees[b] - degrees[a]);
+
+            int seeded = Math.min(POP_SIZE / 10, 10);
+            for (int i = 0; i < seeded; i++) {
+                boolean[] individual = new boolean[numVertices];
+                int[] validVertices = new int[numVertices];
+                int startVertex;
+                if (i % 2 == 0) {
+                    startVertex = verticesByDegree.get((i / 2) % verticesByDegree.size());
+                } else {
+                    startVertex = verticesByDegree.get(verticesByDegree.size() - 1 - (i / 2) % verticesByDegree.size());
+                }
+                validVertices[startVertex] = 1;
+                inducedPathsFromVertex(startVertex, startVertex, new boolean[numVertices], 0, individual, new int[1], validVertices, new int[1], 100, 20, new int[1], new boolean[1], false);
+                population.add(individual);
+            }
+        }
+
+        while (population.size() < POP_SIZE) {
             population.add(generateRandomIndividual());
         }
         return population;
@@ -237,6 +308,106 @@ public class LongestInducedPathGenetic extends GraphAlgorithm implements Induced
         return countNeighbours == 1;
     }
 
+    private void boostIndividual(boolean[] indv) {
+        int[] invalidVertices = new int[numVertices];
+        for (int v = 0; v < numVertices; v++) {
+            if (indv[v]) {
+                invalidVertices[v]++;
+                for (int nb : graph.neighbors(v)) {
+                    invalidVertices[nb]++;
+                }
+            }
+        }
+
+        List<Integer> endpoints = new ArrayList<>();
+        for (int v = 0; v < numVertices; v++) {
+            if (!indv[v]) continue;
+            int deg = 0;
+            for (int nb : graph.neighbors(v)) {
+                if (indv[nb]) deg++;
+            }
+            if (deg <= 1) endpoints.add(v);
+        }
+
+        Collections.shuffle(endpoints, random);
+        for (int endpoint : endpoints) {
+            extendFrom(endpoint, indv, invalidVertices);
+        }
+    }
+
+    private void extendFrom(int start, boolean[] indv, int[] invalidVertices) {
+        int current = start;
+        while (true) {
+            List<Integer> candidates = new ArrayList<>();
+            for (int nb : graph.neighbors(current)) {
+                if (!indv[nb] && invalidVertices[nb] == 1) {
+                    candidates.add(nb);
+                }
+            }
+            if (candidates.isEmpty()) break;
+            int chosen = candidates.get(random.nextInt(candidates.size()));
+            indv[chosen] = true;
+            invalidVertices[chosen]++;
+            for (int nb : graph.neighbors(chosen)) {
+                invalidVertices[nb]++;
+            }
+            current = chosen;
+        }
+    }
+
+    private void perturbAndReboost(boolean[] indv) {
+        int originalLength = 0;
+        for (int i = 0; i < numVertices; i++) if (indv[i]) originalLength++;
+        if (originalLength <= 3) return;
+
+        boolean[] backup = Arrays.copyOf(indv, numVertices);
+
+        List<Integer> endpoints = new ArrayList<>();
+        for (int v = 0; v < numVertices; v++) {
+            if (!indv[v]) continue;
+            int deg = 0;
+            for (int nb : graph.neighbors(v)) if (indv[nb]) deg++;
+            if (deg <= 1) endpoints.add(v);
+        }
+        if (endpoints.size() != 2) return;
+
+        int endpoint = endpoints.get(random.nextInt(2));
+        int trimCount = 1 + random.nextInt(3);
+        int current = endpoint;
+        for (int t = 0; t < trimCount && current != -1; t++) {
+            indv[current] = false;
+            int next = -1;
+            for (int nb : graph.neighbors(current)) {
+                if (indv[nb]) { next = nb; break; }
+            }
+            current = next;
+        }
+
+        boostIndividual(indv);
+
+        int newLength = 0;
+        for (int i = 0; i < numVertices; i++) if (indv[i]) newLength++;
+        if (newLength < originalLength) {
+            System.arraycopy(backup, 0, indv, 0, numVertices);
+        }
+    }
+
+    private synchronized void updateSharedPath() {
+        if (sharedPath == null || bestIndividual == null) return;
+        int count = 0;
+        for (int i = 0; i < numVertices; i++) {
+            if (bestIndividual[i]) count++;
+        }
+        if (count <= sharedPath.size()) return;
+        try {
+            Path path = indvToPath(bestIndividual);
+            if (path.size() > sharedPath.size()) {
+                sharedPath.clear();
+                for (int v : path) sharedPath.add(v);
+            }
+        } catch (Exception ignored) {}
+    }
+
     /**
      * The mutation operator, takes the current population and mutates each individual within the population with a
      * chance stored in the MUTATION_RATE member of this class. The mutation removes or adds a vertex to the induced
@@ -248,7 +419,9 @@ public class LongestInducedPathGenetic extends GraphAlgorithm implements Induced
         int size = p.size();
         for(int i = 0; i < size; i++) {
             if(random.nextDouble() < RANDOM_MUTATION_RATE) {
-                p.add(generateRandomIndividual());
+                boolean[] newIndv = generateRandomIndividual();
+                boostIndividual(newIndv);
+                p.add(newIndv);
             }
             if(random.nextDouble() < MUTATION_RATE) {
                 boolean[] indv = p.get(i);
@@ -406,9 +579,12 @@ public class LongestInducedPathGenetic extends GraphAlgorithm implements Induced
             if (random.nextDouble() <= PROB_CROSSOVER) {
                 int firstIndex = random.nextInt(populationSize);
                 int secondIndex = random.nextInt(populationSize);
-                while (secondIndex == firstIndex && !checkEqualityIndividuals(p.get(firstIndex), p.get(secondIndex))) {
+                int attempts = 0;
+                while (secondIndex == firstIndex && attempts < 10) {
                     secondIndex = random.nextInt(populationSize);
+                    attempts++;
                 }
+                if (secondIndex == firstIndex) continue;
 
                 boolean[] firstParent = p.get(firstIndex);
                 boolean[] secondParent = p.get(secondIndex);
@@ -429,8 +605,12 @@ public class LongestInducedPathGenetic extends GraphAlgorithm implements Induced
                     }
                 }
 
-                p.add(fixIndividual(firstOffspring));
-                p.add(fixIndividual(secondOffspring));
+                boolean[] fixedFirst = fixIndividual(firstOffspring);
+                boostIndividual(fixedFirst);
+                p.add(fixedFirst);
+                boolean[] fixedSecond = fixIndividual(secondOffspring);
+                boostIndividual(fixedSecond);
+                p.add(fixedSecond);
             }
         }
     }
@@ -446,57 +626,62 @@ public class LongestInducedPathGenetic extends GraphAlgorithm implements Induced
 
     private List<boolean[]> selection(List<boolean[]> p) {
         int size = p.size();
-        List<Double> fitnessList = new ArrayList<>(size);
+        double[] fitness = new double[size];
 
-        double sum = 0;
         double maxim = 0;
         int pmaxim = -1;
-        for (int i = 0; i < size; ++i)
-        {
-            fitnessList.add(Math.pow(evaluateIndividual(p.get(i)), SELECTION_PRESSURE));
-            if (maxim < fitnessList.get(i))
-            {
-                maxim = fitnessList.get(i);
+        for (int i = 0; i < size; i++) {
+            fitness[i] = evaluateIndividual(p.get(i));
+            if (fitness[i] > maxim) {
+                maxim = fitness[i];
                 pmaxim = i;
             }
-            if(fitnessList.get(i) > bestValue) {
-                bestValue = fitnessList.get(i);
+            if (fitness[i] > bestValue) {
+                bestValue = fitness[i];
                 lastFoundImprovement = currentGeneration;
                 bestIndividual = Arrays.copyOf(p.get(i), p.get(i).length);
+                updateSharedPath();
             }
-            sum += fitnessList.get(i);
-        }
-
-        List<Double> probabilityList = new ArrayList<>(size);
-        for (int i = 0; i < size; ++i)
-        {
-            probabilityList.add(fitnessList.get(i) / sum);
-        }
-
-        List<Double> summedProb = new ArrayList<>(size);
-        summedProb.add(probabilityList.getFirst());
-        for (int i = 1; i < size; ++i)
-        {
-            summedProb.add(summedProb.get(i - 1) + probabilityList.get(i));
         }
 
         List<boolean[]> newPop = new ArrayList<>(POP_SIZE);
 
-        for(int i = 0; i < ELITISM; i++) {
-            boolean[] copyOfIndividual = Arrays.copyOf(p.get(pmaxim), p.get(pmaxim).length);
-            newPop.add(copyOfIndividual);
+        for (int i = 0; i < ELITISM; i++) {
+            newPop.add(Arrays.copyOf(p.get(pmaxim), p.get(pmaxim).length));
         }
 
-        for(int i = ELITISM; i < POP_SIZE; i++) {
-            double r = random.nextDouble();
-            for(int j = 0; j < size; j++) {
-                if(r < summedProb.get(j)) {
-                    boolean[] copyOfIndividual = Arrays.copyOf(p.get(j), p.get(j).length);
-                    newPop.add(copyOfIndividual);
-                    break;
+        if (SELECTION_MODE == GeneticAlgorithmConfig.SelectionMode.ROULETTE) {
+            double[] adjusted = new double[size];
+            double sum = 0;
+            for (int i = 0; i < size; i++) {
+                adjusted[i] = Math.pow(fitness[i], SELECTION_PRESSURE);
+                sum += adjusted[i];
+            }
+            for (int i = ELITISM; i < POP_SIZE; i++) {
+                if (sum <= 0) {
+                    newPop.add(Arrays.copyOf(p.get(random.nextInt(size)), numVertices));
+                } else {
+                    double r = random.nextDouble() * sum;
+                    double cumul = 0;
+                    int selected = size - 1;
+                    for (int j = 0; j < size; j++) {
+                        cumul += adjusted[j];
+                        if (r <= cumul) { selected = j; break; }
+                    }
+                    newPop.add(Arrays.copyOf(p.get(selected), p.get(selected).length));
                 }
             }
+        } else {
+            for (int i = ELITISM; i < POP_SIZE; i++) {
+                int best = random.nextInt(size);
+                for (int t = 1; t < TOURNAMENT_SIZE; t++) {
+                    int candidate = random.nextInt(size);
+                    if (fitness[candidate] > fitness[best]) best = candidate;
+                }
+                newPop.add(Arrays.copyOf(p.get(best), p.get(best).length));
+            }
         }
+
         return newPop;
     }
 
@@ -559,10 +744,20 @@ public class LongestInducedPathGenetic extends GraphAlgorithm implements Induced
      */
 
     private void runGeneticAlgorithm() {
+        longestInducedPath = new Path(graph);
         int localMaxGeneration = MAX_GENERATION;
         List<boolean[]> p = generateStartingPopulation();
+        for (boolean[] indv : p) boostIndividual(indv);
         while(currentGeneration < localMaxGeneration) {
+            if (Thread.currentThread().isInterrupted()) break;
             p = selection(p);
+            if (!p.isEmpty()) boostIndividual(p.get(0));
+            if (MEMETIC_LOCAL_SEARCH) {
+                int topK = Math.min(MEMETIC_TOP_K, p.size());
+                for (int i = 0; i < topK; i++) {
+                    perturbAndReboost(p.get(i));
+                }
+            }
             mutate(p);
             crossOver(p);
 
@@ -572,7 +767,10 @@ public class LongestInducedPathGenetic extends GraphAlgorithm implements Induced
             }
         }
 
-        longestInducedPath = indvToPath(bestIndividual);
+        if (bestIndividual != null) {
+            longestInducedPath = indvToPath(bestIndividual);
+            updateSharedPath();
+        }
     }
 
     /**
@@ -663,6 +861,19 @@ public class LongestInducedPathGenetic extends GraphAlgorithm implements Induced
                 runForEachConnectedComponent();
             } else {
                 runGeneticAlgorithm();
+                int restarts = numVertices <= 100 ? 2 : 0;
+                for (int restart = 0; restart < restarts && !Thread.currentThread().isInterrupted(); restart++) {
+                    Path previousBest = longestInducedPath;
+                    currentGeneration = 0;
+                    lastFoundImprovement = 0;
+                    bestIndividual = null;
+                    bestValue = 0;
+                    runGeneticAlgorithm();
+                    if (previousBest.size() > longestInducedPath.size()) {
+                        longestInducedPath = previousBest;
+                    }
+                    updateSharedPath();
+                }
             }
         }
         return longestInducedPath;

@@ -36,7 +36,7 @@ public class RunBenchmark {
 
     private record GraphInstance(String name, Graph graph) {
         int numVertices() { return graph.numVertices(); }
-        int numEdges() { return graph.numEdges(); }
+        long numEdges() { return graph.numEdges(); }
     }
 
     private record AlgorithmEntry(String name, BiFunction<Graph, Path, InducedPathAlgorithm> factory) {}
@@ -110,7 +110,7 @@ public class RunBenchmark {
 
         String name = instance.name();
         int numV = instance.numVertices();
-        int numE = instance.numEdges();
+        long numE = instance.numEdges();
         String[] row;
 
         try {

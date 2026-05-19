@@ -10,6 +10,8 @@ import org.graph4j.Graph;
  * @author Apetrei Razvan-Emanuel
  */
 public class GeneticAlgorithmConfig {
+    public enum SelectionMode { TOURNAMENT, ROULETTE }
+
     private Graph graph;
     private int popSize;
     private int maxGeneration;
@@ -22,6 +24,12 @@ public class GeneticAlgorithmConfig {
     private double probabilityCrossover;
     private double selectionPressure;
     private boolean processEachComponentSeparately;
+    private SelectionMode selectionMode;
+    private int tournamentSize;
+    private boolean[] initialSeed;
+    private int[] preferredStartVertices;
+    private boolean memeticLocalSearch;
+    private int memeticTopK;
 
     /**
      * Constructs a GeneticAlgorithmConfig with settings based on the provided graph.
@@ -34,16 +42,16 @@ public class GeneticAlgorithmConfig {
         this.graph = graph;
 
         // The population size is set to the number of vertices in the graph
-        popSize = graph.numVertices();
+        popSize = Math.min(graph.numVertices(), 1000);
 
         // Dynamic generation setting is enabled to make the algorithm continue searching for large instances.
         dynamicMaxGeneration = true;
 
         // Max generation increase is set high to allow for extensive searching on large instances.
-        maxGenerationIncrease = 100;
+        maxGenerationIncrease = 200;
 
         // Initial max generation is set to 300, a lower value so the algorithm doesn't take long on small instances.
-        maxGeneration = 300;
+        maxGeneration = 500;
 
         // Elitism is set to a fraction of the population size to preserve the best solutions
         elitism = popSize / 20;
@@ -51,11 +59,14 @@ public class GeneticAlgorithmConfig {
         // Higher mutation rate to encourage diverse genetic variations
         mutationRate = 0.1;
 
-        // A moderate number of mutations per individual to allow the mutation to make significant changes
-        mutationCount = 5;
+        // Scale mutation count for large dense graphs; keep low for sparse graphs
+        double avgDegree = 2.0 * graph.numEdges() / graph.numVertices();
+        mutationCount = (graph.numVertices() > 100 && avgDegree >= 4.0)
+                ? Math.min(15, 5 + graph.numVertices() / 100)
+                : 5;
 
         // High random mutation rate to introduce additional individuals to prevent the algorithm from stagnating
-        randomMutationRate = 0.85;
+        randomMutationRate = 0.5;
 
         // Lower probability of crossover since crossover is time expensive
         probabilityCrossover = 0.3;
@@ -65,6 +76,20 @@ public class GeneticAlgorithmConfig {
 
         // Sets the algorithm to not run for each connected component inside the input graph
         processEachComponentSeparately = false;
+
+        // Default to tournament selection
+        selectionMode = SelectionMode.TOURNAMENT;
+        tournamentSize = 2;
+
+        // No ILP seed by default
+        initialSeed = null;
+
+        // No preferred start vertices by default
+        preferredStartVertices = null;
+
+        // Memetic local search disabled by default
+        memeticLocalSearch = false;
+        memeticTopK = 5;
     }
 
     /**
@@ -261,5 +286,53 @@ public class GeneticAlgorithmConfig {
      */
     public void setProcessEachComponentSeparately(boolean processEachComponentSeparately) {
         this.processEachComponentSeparately = processEachComponentSeparately;
+    }
+
+    public SelectionMode getSelectionMode() {
+        return selectionMode;
+    }
+
+    public void setSelectionMode(SelectionMode selectionMode) {
+        this.selectionMode = selectionMode;
+    }
+
+    public int getTournamentSize() {
+        return tournamentSize;
+    }
+
+    public void setTournamentSize(int tournamentSize) {
+        this.tournamentSize = tournamentSize;
+    }
+
+    public boolean[] getInitialSeed() {
+        return initialSeed;
+    }
+
+    public void setInitialSeed(boolean[] initialSeed) {
+        this.initialSeed = initialSeed;
+    }
+
+    public int[] getPreferredStartVertices() {
+        return preferredStartVertices;
+    }
+
+    public void setPreferredStartVertices(int[] preferredStartVertices) {
+        this.preferredStartVertices = preferredStartVertices;
+    }
+
+    public boolean isMemeticLocalSearch() {
+        return memeticLocalSearch;
+    }
+
+    public void setMemeticLocalSearch(boolean memeticLocalSearch) {
+        this.memeticLocalSearch = memeticLocalSearch;
+    }
+
+    public int getMemeticTopK() {
+        return memeticTopK;
+    }
+
+    public void setMemeticTopK(int memeticTopK) {
+        this.memeticTopK = memeticTopK;
     }
 }

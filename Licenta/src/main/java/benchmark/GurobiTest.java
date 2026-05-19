@@ -1,6 +1,6 @@
 package benchmark;
 
-import gurobi.*;
+import com.gurobi.gurobi.*;
 
 /**
  * Quick test to verify Gurobi is correctly linked. Solves: maximize x + y, subject to x + 2y <= 4, x,y >= 0.
