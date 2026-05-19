@@ -11,6 +11,84 @@ This problem is NP-hard in general and has applications in network analysis, bio
 
 ---
 
+## Results
+
+### Complete Results Table — All Algorithms, All Graphs
+
+Verified on 2026-05-19. ILP: 1 run, 2-min timeout. GA: best config (ILP+Roulette, pop scaled by graph size), 3 runs. ACO v1 and v3: 3 runs each on small graphs, 1 run on large graphs (\|V\|>300). Yeast GA/ACO used 15-min timeout (some runs timed out; extensive prior data available).
+
+| Instance | \|V\| | \|E\| | OPT | Our ILP | Our GA Best | Our GA Avg | Our ACOv1 | Our ACOv3 | HLIPP | Prev. GA |
+|----------|-------|-------|-----|---------|-------------|------------|-----------|-----------|-------|----------|
+| high-tech | 33 | 91 | 13 | **13** | 13 | 13.0 | 13 | 13 | 13 | 13 |
+| karate | 34 | 78 | 9 | **9** | 9 | 9.0 | 9 | 9 | 9 | 9 |
+| mexican | 35 | 117 | 16 | **16** | 16 | 16.0 | 16 | 16 | 16 | 16 |
+| sawmill | 36 | 62 | 18 | **18** | 18 | 18.0 | 18 | 18 | 18 | 18 |
+| chesapeake | 39 | 170 | 16 | **16** | 16 | 16.0 | 16 | 16 | 16 | 16 |
+| tailorS1 | 39 | 158 | 13 | **13** | 13 | 13.0 | 13 | 13 | 13 | 13 |
+| tailorS2 | 39 | 223 | 15 | **15** | 15 | 15.0 | 15 | 15 | 15 | 15 |
+| romeo&juliet | 41 | 120 | 9 | **9** | 9 | 9.0 | 9 | 9 | 9 | 9 |
+| die hard | 47 | 237 | 10 | **10** | 10 | 10.0 | 10 | 10 | 10 | 10 |
+| attiro | 59 | 128 | 31 | **31** | 31 | 31.0 | 31 | 31 | 30 | 31 |
+| dolphins | 62 | 159 | 24 | **24** | 24 | 24.0 | 23 | 24 | 23 | 24 |
+| krebs | 62 | 153 | 17 | **17** | 17 | 17.0 | 17 | 17 | 17 | 17 |
+| prison | 67 | 142 | 36 | **36** | 36 | 36.0 | 36 | 36 | 36 | 36 |
+| huck | 69 | 297 | 9 | **9** | 9 | 9.0 | 9 | 9 | 9 | 9 |
+| sanjuansur | 75 | 144 | 38 | **38** | 38 | 38.0 | 38 | 38 | 36 | 38 |
+| jean | 77 | 254 | 11 | **11** | 11 | 11.0 | 11 | 11 | 11 | 11 |
+| david | 87 | 406 | 19 | **19** | 19 | 19.0 | 19 | 19 | 19 | 19 |
+| sfi | 118 | 200 | 13 | **13** | 13 | 13.0 | 13 | 13 | 13 | 13 |
+| ieeebus | 118 | 179 | 47 | **47** | 47 | 47.0 | 47 | 47 | 47 | 47 |
+| anna | 138 | 493 | 20 | **20** | 20 | 20.0 | 20 | 20 | 20 | 20 |
+| usair | 332 | 2,126 | 46 | **46** | **46** | 46.0 | 40 | 42 | 38 | 42 |
+| 494bus | 494 | 586 | 142 | **142** | **142** | 142.0 | 134 | 128 | 109 | 138 |
+| 662bus | 662 | 906 | ? | 304* | **304** | 304.0 | 287 | 201 | 237 | 276 |
+| yeast | 2,361 | 6,646 | ? | 4 | **285** | 257.4 | 179 | T/O | 204 | 245 |
+
+ **HLIPP** = original HLIPP heuristic from Marzo & Ribeiro (2021), as tested in our bachelor thesis (Licenta, Table 3.3). HLIPP Modified results: attiro=31, sanjuansur=38, usair=42, 494bus=129, 662bus=251, yeast=221.  
+ **Prev. GA** = Genetic Algorithm results from our bachelor thesis (Licenta, Table 3.3) using the original untuned configuration (pop=\|V\|, mutRate=0.85, maxGen=300).  
+\* 662bus: Our ILP finds 304 in <5 min. All 8 ILP formulations in Bokler et al. (2020) timed out at 20 min. Literature ILP results: usair=46 (922s), 494bus=142 (171s), 662bus=TIMEOUT, yeast=TIMEOUT.
+
+**Improvement over bachelor thesis (Prev. GA -> Our GA Best):**
+- **usair**: 42 -> **46** (+9.5%, now optimal)
+- **494bus**: 138 -> **142** (+2.9%, now optimal)
+- **662bus**: 276 -> **304** (+10.1%, exceeds all prior literature)
+- **yeast**: 245 -> **285** (+16.3%, new state-of-the-art)
+
+---
+
+## Benchmark Instances
+
+24 graphs from various domains, ordered by size:
+
+| Instance | \|V\| | \|E\| | Avg Degree | Domain |
+|----------|------|-------|------------|--------|
+| high-tech | 33 | 91 | 5.5 | Social network |
+| karate | 34 | 78 | 4.6 | Social network |
+| mexican | 35 | 117 | 6.7 | Social network |
+| sawmill | 36 | 62 | 3.4 | Social network |
+| chesapeake | 39 | 170 | 8.7 | Ecological |
+| tailorS1 | 39 | 158 | 8.1 | Social network |
+| tailorS2 | 39 | 223 | 11.4 | Social network |
+| romeo and juliet | 41 | 120 | 5.9 | Literary network |
+| die hard | 47 | 237 | 10.1 | Movie network |
+| attiro | 59 | 128 | 4.3 | Social network |
+| dolphins | 62 | 159 | 5.1 | Animal social |
+| krebs | 62 | 153 | 4.9 | Political books |
+| prison | 67 | 142 | 4.2 | Social network |
+| huck | 69 | 297 | 8.6 | Literary network |
+| sanjuansur | 75 | 144 | 3.8 | Geographic |
+| jean | 77 | 254 | 6.6 | Literary network |
+| david | 87 | 406 | 9.3 | Biblical network |
+| sfi | 118 | 200 | 3.4 | Collaboration |
+| ieeebus | 118 | 179 | 3.0 | Power grid |
+| anna | 138 | 493 | 7.1 | Literary network |
+| usair | 332 | 2,126 | 12.8 | Air routes |
+| 494bus | 494 | 586 | 2.4 | Power grid |
+| 662bus | 662 | 906 | 2.7 | Power grid |
+| yeast | 2,361 | 6,646 | 5.6 | Protein interaction |
+
+---
+
 ## Algorithms
 
 ### 1. Integer Linear Programming (ILP) — Exact Method
@@ -183,83 +261,7 @@ This problem is NP-hard in general and has applications in network analysis, bio
 
 ---
 
-## Benchmark Instances
-
-24 graphs from various domains, ordered by size:
-
-| Instance | \|V\| | \|E\| | Avg Degree | Domain |
-|----------|------|-------|------------|--------|
-| high-tech | 33 | 91 | 5.5 | Social network |
-| karate | 34 | 78 | 4.6 | Social network |
-| mexican | 35 | 117 | 6.7 | Social network |
-| sawmill | 36 | 62 | 3.4 | Social network |
-| chesapeake | 39 | 170 | 8.7 | Ecological |
-| tailorS1 | 39 | 158 | 8.1 | Social network |
-| tailorS2 | 39 | 223 | 11.4 | Social network |
-| romeo and juliet | 41 | 120 | 5.9 | Literary network |
-| die hard | 47 | 237 | 10.1 | Movie network |
-| attiro | 59 | 128 | 4.3 | Social network |
-| dolphins | 62 | 159 | 5.1 | Animal social |
-| krebs | 62 | 153 | 4.9 | Political books |
-| prison | 67 | 142 | 4.2 | Social network |
-| huck | 69 | 297 | 8.6 | Literary network |
-| sanjuansur | 75 | 144 | 3.8 | Geographic |
-| jean | 77 | 254 | 6.6 | Literary network |
-| david | 87 | 406 | 9.3 | Biblical network |
-| sfi | 118 | 200 | 3.4 | Collaboration |
-| ieeebus | 118 | 179 | 3.0 | Power grid |
-| anna | 138 | 493 | 7.1 | Literary network |
-| usair | 332 | 2,126 | 12.8 | Air routes |
-| 494bus | 494 | 586 | 2.4 | Power grid |
-| 662bus | 662 | 906 | 2.7 | Power grid |
-| yeast | 2,361 | 6,646 | 5.6 | Protein interaction |
-
----
-
-## Results
-
-### Complete Results Table — All Algorithms, All Graphs
-
-Verified on 2026-05-19. ILP: 1 run, 2-min timeout. GA: best config (ILP+Roulette, pop scaled by graph size), 3 runs. ACO v1 and v3: 3 runs each on small graphs, 1 run on large graphs (|V|>300). Yeast GA/ACO used 15-min timeout (some runs timed out; extensive prior data available).
-
-| Instance | \|V\| | \|E\| | OPT | Our ILP | Our GA Best | Our GA Avg | Our ACOv1 | Our ACOv3 | HLIPP | Prev. GA |
-|----------|-------|-------|-----|---------|-------------|------------|-----------|-----------|-------|----------|
-| high-tech | 33 | 91 | 13 | **13** | 13 | 13.0 | 13 | 13 | 13 | 13 |
-| karate | 34 | 78 | 9 | **9** | 9 | 9.0 | 9 | 9 | 9 | 9 |
-| mexican | 35 | 117 | 16 | **16** | 16 | 16.0 | 16 | 16 | 16 | 16 |
-| sawmill | 36 | 62 | 18 | **18** | 18 | 18.0 | 18 | 18 | 18 | 18 |
-| chesapeake | 39 | 170 | 16 | **16** | 16 | 16.0 | 16 | 16 | 16 | 16 |
-| tailorS1 | 39 | 158 | 13 | **13** | 13 | 13.0 | 13 | 13 | 13 | 13 |
-| tailorS2 | 39 | 223 | 15 | **15** | 15 | 15.0 | 15 | 15 | 15 | 15 |
-| romeo&juliet | 41 | 120 | 9 | **9** | 9 | 9.0 | 9 | 9 | 9 | 9 |
-| die hard | 47 | 237 | 10 | **10** | 10 | 10.0 | 10 | 10 | 10 | 10 |
-| attiro | 59 | 128 | 31 | **31** | 31 | 31.0 | 31 | 31 | 30 | 31 |
-| dolphins | 62 | 159 | 24 | **24** | 24 | 24.0 | 23 | 24 | 23 | 24 |
-| krebs | 62 | 153 | 17 | **17** | 17 | 17.0 | 17 | 17 | 17 | 17 |
-| prison | 67 | 142 | 36 | **36** | 36 | 36.0 | 36 | 36 | 36 | 36 |
-| huck | 69 | 297 | 9 | **9** | 9 | 9.0 | 9 | 9 | 9 | 9 |
-| sanjuansur | 75 | 144 | 38 | **38** | 38 | 38.0 | 38 | 38 | 36 | 38 |
-| jean | 77 | 254 | 11 | **11** | 11 | 11.0 | 11 | 11 | 11 | 11 |
-| david | 87 | 406 | 19 | **19** | 19 | 19.0 | 19 | 19 | 19 | 19 |
-| sfi | 118 | 200 | 13 | **13** | 13 | 13.0 | 13 | 13 | 13 | 13 |
-| ieeebus | 118 | 179 | 47 | **47** | 47 | 47.0 | 47 | 47 | 47 | 47 |
-| anna | 138 | 493 | 20 | **20** | 20 | 20.0 | 20 | 20 | 20 | 20 |
-| usair | 332 | 2,126 | 46 | **46** | **46** | 46.0 | 40 | 42 | 38 | 42 |
-| 494bus | 494 | 586 | 142 | **142** | **142** | 142.0 | 134 | 128 | 109 | 138 |
-| 662bus | 662 | 906 | ? | 304* | **304** | 304.0 | 287 | 201 | 237 | 276 |
-| yeast | 2,361 | 6,646 | ? | 4 | **285** | 257.4 | 179 | T/O | 204 | 245 |
-
- **HLIPP** = original HLIPP heuristic from Marzo & Ribeiro (2021), as tested in our bachelor thesis (Licenta, Table 3.3). HLIPP Modified results: attiro=31, sanjuansur=38, usair=42, 494bus=129, 662bus=251, yeast=221.  
- **Prev. GA** = Genetic Algorithm results from our bachelor thesis (Licenta, Table 3.3) using the original untuned configuration (pop=|V|, mutRate=0.85, maxGen=300).  
-\* 662bus: Our ILP finds 304 in <5 min. All 8 ILP formulations in Bokler et al. (2020) timed out at 20 min. Literature ILP results: usair=46 (922s), 494bus=142 (171s), 662bus=TIMEOUT, yeast=TIMEOUT.
-
-**Improvement over bachelor thesis (Prev. GA → Our GA Best):**
-- **usair**: 42 → **46** (+9.5%, now optimal)
-- **494bus**: 138 → **142** (+2.9%, now optimal)
-- **662bus**: 276 → **304** (+10.1%, exceeds all prior literature)
-- **yeast**: 245 → **285** (+16.3%, new state-of-the-art)
-
-### Key Instance Results (from extensive prior experiments)
+## Key Instance Results (from extensive prior experiments)
 
 Literature state-of-the-art from Marzo & Ribeiro (2021, RAIRO-OR), Bokler et al. (2020, ISCO), and Marzo et al. (2022, COR). Their heuristic is HLIPP (LH10000). Their ILP used 20-min time limit. Note: their "S.Cerevisae" (1458V, 1948E) is a smaller version of yeast than ours (2361V, 6646E).
 
