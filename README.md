@@ -187,7 +187,7 @@ This problem is NP-hard in general and has applications in network analysis, bio
 
 24 graphs from various domains, ordered by size:
 
-| Instance | |V| | |E| | Avg Degree | Domain |
+| Instance | \|V\| | \|E\| | Avg Degree | Domain |
 |----------|------|-------|------------|--------|
 | high-tech | 33 | 91 | 5.5 | Social network |
 | karate | 34 | 78 | 4.6 | Social network |
