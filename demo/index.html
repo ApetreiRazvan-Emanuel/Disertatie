@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Longest Induced Path — ACO &amp; Genetic Algorithm Demo</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header>
+  <div class="title">
+    <h1>Longest Induced Path</h1>
+    <span class="subtitle">interactive demo — Ant Colony Optimization &amp; Genetic Algorithm</span>
+  </div>
+  <div class="header-right">
+    <div id="graph-info" class="graph-info">no graph yet</div>
+    <button id="btn-focus" title="Hide panels, fit the graph to the screen (F)">🎬 Focus</button>
+  </div>
+</header>
+
+<div id="app">
+
+  <!-- ================= LEFT: instance panel ================= -->
+  <aside id="left">
+    <h2>Graph instance</h2>
+
+    <label class="field">
+      <span>Type</span>
+      <select id="gen-type">
+        <option value="planted">Planted LIP (hard instance)</option>
+        <option value="random">Random graph</option>
+        <option value="cube">Hypercube Q<sub>d</sub></option>
+        <option value="library">Benchmark instances (thesis)</option>
+        <option value="import">Paste your own (DIMACS / GraphML)</option>
+      </select>
+    </label>
+
+    <div id="gen-planted" class="gen-opts">
+      <label class="field slider-field">
+        <span>Vertices <b id="planted-n-val">40</b></span>
+        <input type="range" id="planted-n" min="15" max="400" value="40">
+      </label>
+      <label class="field slider-field">
+        <span>Planted path length <b id="planted-l-val">20</b></span>
+        <input type="range" id="planted-l" min="5" max="240" value="20">
+      </label>
+      <label class="field slider-field">
+        <span>Trap degree <b id="planted-deg-val">5</b> <span class="hint-inline">(edges per noise vertex → path)</span></span>
+        <input type="range" id="planted-deg" min="2" max="12" value="5">
+      </label>
+      <p class="hint">High = traps obviously poison the path (easy). Low = subtle traps (hard). At 2 the planted path may not even stay optimal.</p>
+    </div>
+
+    <div id="gen-random" class="gen-opts hidden">
+      <label class="field slider-field">
+        <span>Vertices <b id="rand-n-val">40</b></span>
+        <input type="range" id="rand-n" min="10" max="250" value="40">
+      </label>
+      <label class="field slider-field">
+        <span>Average degree <b id="rand-d-val">3.0</b></span>
+        <input type="range" id="rand-d" min="15" max="120" value="30">
+      </label>
+    </div>
+
+    <div id="gen-cube" class="gen-opts hidden">
+      <label class="field slider-field">
+        <span>Dimension d <b id="cube-d-val">4</b></span>
+        <input type="range" id="cube-d" min="3" max="7" value="4">
+      </label>
+      <p class="hint">Q<sub>d</sub> has 2<sup>d</sup> vertices — the longest induced path is the famous <i>snake-in-the-box</i>.</p>
+    </div>
+
+    <div id="gen-library" class="gen-opts hidden">
+      <label class="field">
+        <span>Instance</span>
+        <select id="library-select"></select>
+      </label>
+      <p class="hint">The real benchmark set from <code>graph-instances/</code>, embedded in the demo. Instances over ~300 vertices take a while to lay out and animate.</p>
+    </div>
+
+    <div id="gen-import" class="gen-opts hidden">
+      <textarea id="import-text" rows="7" placeholder="Paste DIMACS ('e u v' lines) or GraphML here…"></textarea>
+      <p class="hint">Works with the instances from <code>graph-instances/</code>. Big graphs (&gt;300 vertices) will be slow to animate.</p>
+    </div>
+
+    <button id="btn-generate" class="primary">⟳ Generate</button>
+
+    <div id="planted-info" class="planted-info hidden"></div>
+
+    <label class="check" id="planted-reveal-wrap">
+      <input type="checkbox" id="show-planted">
+      <span>Reveal planted path <span class="gold">(gold)</span></span>
+    </label>
+
+    <label class="field slider-field">
+      <span>Vertex spacing <b id="spacing-val">85%</b></span>
+      <input type="range" id="spacing" min="55" max="140" value="85">
+    </label>
+
+    <label class="check">
+      <input type="checkbox" id="hide-banner" checked>
+      <span>Hide status messages over the graph</span>
+    </label>
+
+    <div class="divider"></div>
+
+    <h2>Legend</h2>
+    <div class="legend">
+      <div class="legend-row"><span class="sw sw-best"></span> best path found</div>
+      <div class="legend-row"><span class="sw sw-current"></span> current / selected path</div>
+      <div class="legend-row"><span class="sw sw-planted"></span> planted (optimal) path</div>
+      <div class="legend-row" id="legend-phero-row">
+        <span class="sw sw-phero"></span> pheromone level (low → high)
+      </div>
+      <div class="legend-row exact-legend hidden">
+        <span class="sw sw-blocked"></span> forbidden (adjacent to the path)
+      </div>
+      <div class="legend-row exact-legend hidden">
+        <span class="sw sw-cand"></span> can extend the path next
+      </div>
+    </div>
+
+    <div class="divider"></div>
+    <p class="hint">Drag vertices to rearrange · drag background to pan · scroll to zoom.</p>
+  </aside>
+
+  <!-- ================= CENTER: canvas ================= -->
+  <main id="center">
+    <div id="phase-banner">generate a graph to begin</div>
+    <button id="btn-focus-exit" title="Exit focus mode (Esc)">✕</button>
+    <canvas id="canvas"></canvas>
+  </main>
+
+  <!-- ================= RIGHT: algorithm panel ================= -->
+  <aside id="right">
+    <div class="tabs">
+      <button class="tab active" data-tab="exact">🔍 Exact</button>
+      <button class="tab" data-tab="aco">🐜 ACO</button>
+      <button class="tab" data-tab="ga">🧬 Genetic</button>
+    </div>
+
+    <!-- ---------- ACO tab ---------- -->
+    <section id="tab-aco" class="tab-body hidden">
+      <div class="controls">
+        <button id="aco-play" class="primary">▶ Run</button>
+        <button id="aco-step">⏭ Step</button>
+        <button id="aco-reset">↺ Reset</button>
+      </div>
+      <label class="field slider-field">
+        <span>Speed <b id="aco-speed-val">1×</b></span>
+        <input type="range" id="aco-speed" min="0" max="100" value="20">
+      </label>
+
+      <div class="stat-grid">
+        <div class="stat"><span class="stat-label">iteration</span><span class="stat-val" id="aco-iter">0</span></div>
+        <div class="stat best"><span class="stat-label">best path</span><span class="stat-val" id="aco-best">0</span></div>
+        <div class="stat"><span class="stat-label">found at iter</span><span class="stat-val" id="aco-best-iter">–</span></div>
+      </div>
+
+      <div class="steps" id="aco-steps">
+        <div class="step" data-i="0"><b>1.</b> Ants build induced paths, guided by pheromone</div>
+        <div class="step" data-i="1"><b>2.</b> Evaluate: longest ant path wins the iteration</div>
+        <div class="step" data-i="2"><b>3.</b> Evaporation: all pheromone fades</div>
+        <div class="step" data-i="3"><b>4.</b> Deposit: best paths get extra pheromone</div>
+      </div>
+
+      <label class="check">
+        <input type="checkbox" id="aco-show-tau">
+        <span>Show pheromone values on edges</span>
+      </label>
+
+      <details open>
+        <summary>Parameters</summary>
+        <label class="field slider-field">
+          <span>Ants <b id="aco-ants-val">2</b></span>
+          <input type="range" id="aco-ants" min="1" max="20" value="2">
+        </label>
+        <label class="field slider-field">
+          <span>Pheromone influence α <b id="aco-alpha-val">1.5</b></span>
+          <input type="range" id="aco-alpha" min="0" max="40" value="15">
+        </label>
+        <label class="field slider-field">
+          <span>Degree heuristic β <b id="aco-beta-val">0.5</b></span>
+          <input type="range" id="aco-beta" min="0" max="30" value="5">
+        </label>
+        <label class="field slider-field">
+          <span>Evaporation ρ <b id="aco-rho-val">0.15</b></span>
+          <input type="range" id="aco-rho" min="1" max="60" value="15">
+        </label>
+        <label class="check">
+          <input type="checkbox" id="aco-elitist" checked>
+          <span>Elitist: best-so-far also deposits</span>
+        </label>
+      </details>
+
+      <div class="log-box">
+        <div class="log-title">improvements</div>
+        <div id="aco-log" class="log"></div>
+      </div>
+    </section>
+
+    <!-- ---------- GA tab ---------- -->
+    <section id="tab-ga" class="tab-body hidden">
+      <div class="controls">
+        <button id="ga-play" class="primary">▶ Run</button>
+        <button id="ga-step">⏭ Step</button>
+        <button id="ga-reset">↺ Reset</button>
+      </div>
+      <label class="field slider-field">
+        <span>Speed <b id="ga-speed-val">1×</b></span>
+        <input type="range" id="ga-speed" min="0" max="100" value="50">
+      </label>
+
+      <div class="stat-grid">
+        <div class="stat"><span class="stat-label">generation</span><span class="stat-val" id="ga-gen">0</span></div>
+        <div class="stat best"><span class="stat-label">best path</span><span class="stat-val" id="ga-best">0</span></div>
+        <div class="stat"><span class="stat-label">found at gen</span><span class="stat-val" id="ga-best-gen">–</span></div>
+      </div>
+
+      <canvas id="ga-chart" width="300" height="90"></canvas>
+      <div class="chart-legend">
+        <span><i class="dot dot-best"></i>best</span>
+        <span><i class="dot dot-avg"></i>population average</span>
+      </div>
+
+      <details>
+        <summary>Parameters</summary>
+        <label class="field slider-field">
+          <span>Population <b id="ga-pop-val">24</b></span>
+          <input type="range" id="ga-pop" min="6" max="60" value="24">
+        </label>
+        <label class="field slider-field">
+          <span>Elites <b id="ga-elite-val">3</b></span>
+          <input type="range" id="ga-elite" min="1" max="10" value="3">
+        </label>
+        <label class="field slider-field">
+          <span>Mutation rate <b id="ga-mut-val">0.40</b></span>
+          <input type="range" id="ga-mut" min="0" max="100" value="40">
+        </label>
+        <label class="field slider-field">
+          <span>Crossover rate <b id="ga-cx-val">0.50</b></span>
+          <input type="range" id="ga-cx" min="0" max="100" value="50">
+        </label>
+        <label class="field slider-field">
+          <span>Fresh rate <b id="ga-fresh-val">0.10</b></span>
+          <input type="range" id="ga-fresh" min="0" max="50" value="10">
+        </label>
+      </details>
+
+      <div class="controls demo-controls">
+        <button id="ga-demo-mut" title="Animate the mutation operator on the selected individual">🧬 Mutate selected</button>
+        <button id="ga-demo-cx" title="Animate crossover between the selected individual and a random partner">⚡ Crossover selected</button>
+      </div>
+
+      <div class="pop-header">
+        <span>Population <span id="ga-pop-count"></span></span>
+        <label class="check small">
+          <input type="checkbox" id="ga-follow" checked>
+          <span>follow best</span>
+        </label>
+      </div>
+      <div id="ga-report" class="gen-report hidden"></div>
+      <div id="ga-pop-list" class="pop-list"></div>
+    </section>
+
+    <!-- ---------- Exact tab ---------- -->
+    <section id="tab-exact" class="tab-body">
+      <div class="controls">
+        <button id="ex-play" class="primary">▶ Run</button>
+        <button id="ex-step">⏭ Step</button>
+        <button id="ex-reset">↺ Reset</button>
+      </div>
+      <label class="field slider-field">
+        <span>Speed <b id="ex-speed-val">1×</b> <span class="hint-inline" id="ex-turbo-hint"></span></span>
+        <input type="range" id="ex-speed" min="0" max="100" value="50">
+      </label>
+
+      <label class="field">
+        <span>Variant</span>
+        <select id="ex-variant">
+          <option value="hlip" selected>H-LIP — bounded search (paper heuristic)</option>
+          <option value="exact">Exact enumeration — complete search</option>
+        </select>
+      </label>
+      <label class="field slider-field" id="ex-maxp-wrap">
+        <span>Max paths without improvement <b id="ex-maxp-val">1000</b></span>
+        <input type="range" id="ex-maxp" min="0" max="100" value="50">
+      </label>
+
+      <div class="stat-grid">
+        <div class="stat"><span class="stat-label">start vertex</span><span class="stat-val" id="ex-start">–</span></div>
+        <div class="stat best"><span class="stat-label">best path</span><span class="stat-val" id="ex-best">0</span></div>
+        <div class="stat"><span class="stat-label">dead ends</span><span class="stat-val" id="ex-dead">0</span></div>
+      </div>
+      <div class="budget-line" id="ex-budget"></div>
+
+      <div class="steps">
+        <div class="step"><b>1.</b> Grow the path through allowed neighbors <span class="cand-word">(green rings)</span></div>
+        <div class="step"><b>2.</b> Every other neighbor of the path is forbidden <span class="red-word">(red)</span></div>
+        <div class="step"><b>3.</b> Dead end → record the path, backtrack, try the next branch</div>
+        <div class="step"><b>4.</b> H-LIP: abandon a start vertex after too many paths without improvement</div>
+      </div>
+
+      <div class="log-box">
+        <div class="log-title">improvements</div>
+        <div id="ex-log" class="log"></div>
+      </div>
+    </section>
+  </aside>
+</div>
+
+<script src="instances.js"></script>
+<script src="graph.js"></script>
+<script src="render.js"></script>
+<script src="aco.js"></script>
+<script src="ga.js"></script>
+<script src="exact.js"></script>
+<script src="main.js"></script>
+</body>
+</html>

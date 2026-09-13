@@ -9,6 +9,7 @@ import core.algorithms.inducedpath.paperimplementation.ExactEnumOptimized;
 import core.algorithms.inducedpath.paperimplementation.HLIPP10000;
 import core.io.GraphMLReader;
 import org.graph4j.Graph;
+import org.graph4j.GraphBuilder;
 import org.graph4j.util.Path;
 
 import java.io.*;
@@ -23,7 +24,7 @@ public class FullBenchmarkRunner {
     static final String RES = "src/main/resources/graph-instances/";
     static long TIME_LIMIT_MS = 15 * 60 * 1000;
     static double TIME_LIMIT_SEC = TIME_LIMIT_MS / 1000.0;
-    static final int STOCHASTIC_RUNS = 5;
+    static int STOCHASTIC_RUNS = 5;
 
     static final String[] INSTANCES = {
         "high-tech", "karate", "mexican", "sawmill", "chesapeake",
@@ -44,6 +45,7 @@ public class FullBenchmarkRunner {
                 case "--time" -> { TIME_LIMIT_MS = Long.parseLong(args[++i]) * 1000; TIME_LIMIT_SEC = TIME_LIMIT_MS / 1000.0; }
                 case "--instance" -> singleInstance = args[++i];
                 case "--algo" -> singleAlgo = args[++i];
+                case "--runs" -> STOCHASTIC_RUNS = Integer.parseInt(args[++i]);
             }
         }
 
@@ -71,7 +73,16 @@ public class FullBenchmarkRunner {
                 System.out.println("========== " + inst + " ==========");
                 Graph graph;
                 try {
-                    graph = new GraphMLReader().parseGraphMLFile(RES + inst + ".graphml").readGraph();
+                    File graphmlFile = new File(RES + inst + ".graphml");
+                    File dimacsFile = new File(RES + inst + ".txt");
+                    if (graphmlFile.exists()) {
+                        graph = new GraphMLReader().parseGraphMLFile(graphmlFile.getPath()).readGraph();
+                    } else if (dimacsFile.exists()) {
+                        graph = readDimacsGraph(dimacsFile.getPath());
+                    } else {
+                        System.err.println("No graph file found for " + inst);
+                        continue;
+                    }
                 } catch (Exception e) {
                     System.err.println("Failed to load " + inst + ": " + e.getMessage());
                     continue;
@@ -184,7 +195,11 @@ public class FullBenchmarkRunner {
             case "CEC" -> new CEC(graph, TIME_LIMIT_SEC);
             case "CUT" -> new CUT(graph, TIME_LIMIT_SEC);
             case "ExactEnumOptimized" -> new ExactEnumOptimized(graph);
-            case "HLIPP10000" -> new HLIPP10000(graph);
+            case "HLIPP10000" -> {
+                HLIPP10000 hlipp = new HLIPP10000(graph);
+                hlipp.setTimeLimitMs(TIME_LIMIT_MS);
+                yield hlipp;
+            }
             case "GA" -> {
                 LongestInducedPathGenetic ga = new LongestInducedPathGenetic(graph);
                 ga.setTimeLimitMs(TIME_LIMIT_MS);
@@ -215,6 +230,34 @@ public class FullBenchmarkRunner {
             if (!seen.add(v)) return false;
         }
         return true;
+    }
+
+    static Graph readDimacsGraph(String path) throws IOException {
+        int numVertices = 0;
+        List<int[]> edges = new ArrayList<>();
+        try (BufferedReader br = new BufferedReader(new FileReader(path))) {
+            String line;
+            while ((line = br.readLine()) != null) {
+                line = line.trim();
+                if (line.startsWith("c") || line.isEmpty()) continue;
+                if (line.startsWith("p")) {
+                    String[] parts = line.split("\\s+");
+                    numVertices = Integer.parseInt(parts[2]);
+                } else if (line.startsWith("e")) {
+                    String[] parts = line.split("\\s+");
+                    edges.add(new int[]{Integer.parseInt(parts[1]) - 1, Integer.parseInt(parts[2]) - 1});
+                }
+            }
+        }
+        int[] vertices = new int[numVertices];
+        for (int i = 0; i < numVertices; i++) vertices[i] = i;
+        Graph graph = GraphBuilder.vertices(vertices).buildGraph();
+        for (int[] e : edges) {
+            if (!graph.containsEdge(e[0], e[1])) {
+                graph.addEdge(e[0], e[1]);
+            }
+        }
+        return graph;
     }
 
     record Result(int size, double timeSeconds, Path path) {}

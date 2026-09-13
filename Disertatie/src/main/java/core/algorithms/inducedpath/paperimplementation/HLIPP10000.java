@@ -11,6 +11,8 @@ public class HLIPP10000 extends GraphAlgorithm implements InducedPathAlgorithm {
     private Path inducedPath;
     private int maxPaths = 10000;
     private Path pMax;
+    private long timeLimitMs = Long.MAX_VALUE;
+    private long startTime;
 
     public HLIPP10000(Graph graph) {
         super(graph);
@@ -30,6 +32,14 @@ public class HLIPP10000 extends GraphAlgorithm implements InducedPathAlgorithm {
         this.maxPaths = maxPaths;
     }
 
+    public void setTimeLimitMs(long timeLimitMs) {
+        this.timeLimitMs = timeLimitMs;
+    }
+
+    private boolean isTimeUp() {
+        return Thread.currentThread().isInterrupted() || (System.currentTimeMillis() - startTime >= timeLimitMs);
+    }
+
     public Path getLongestInducedPath() {
         if(inducedPath != null) {
             return inducedPath;
@@ -39,12 +49,12 @@ public class HLIPP10000 extends GraphAlgorithm implements InducedPathAlgorithm {
     }
 
     private void compute() {
+        startTime = System.currentTimeMillis();
         Path pTemp = new Path(graph);
 
-
         for(int s : graph.vertices()) {
-            if(Thread.currentThread().isInterrupted())
-                return;
+            if(isTimeUp())
+                break;
             firstInducedPaths(graph, s, pMax, pTemp, new int[1], new int[1], new boolean[1]);
         }
 
@@ -52,8 +62,10 @@ public class HLIPP10000 extends GraphAlgorithm implements InducedPathAlgorithm {
     }
 
     private void firstInducedPaths(Graph g, int s, Path pMax, Path pTemp, int[] numberOfPaths, int[] lastImprov, boolean[] truncated) {
-        if(Thread.currentThread().isInterrupted())
+        if(isTimeUp()) {
+            truncated[0] = true;
             return;
+        }
         pTemp.add(s);
         int[] nS = g.neighbors(s);
         if(nS.length != 0) {

@@ -15,7 +15,9 @@ import java.util.stream.IntStream;
  * Original: ro.uaic.info.lipp.LippAlgorithm (graph4j-based, multi-threaded DFS with pheromone).
  *
  * Key design: parallel pheromone-guided DFS from multiple starting vertices, with adaptive
- * evaporation, restart mechanism, tabu paths, and directional pheromone deposit.
+ * evaporation, sprint-based restart mechanism, tolerance-filtered proportional pheromone
+ * deposit, and DFS pruning bounds. Synced with upstream commit aab568b (2026-06-27), which
+ * replaced the tabu-path mechanism with per-restart "sprint" bests and deposit tolerance.
  */
 public class LongestInducedPathACO extends GraphAlgorithm implements InducedPathAlgorithm {
 
@@ -27,12 +29,17 @@ public class LongestInducedPathACO extends GraphAlgorithm implements InducedPath
     private final double maxEvaporationRate = 1.0;
     private final double evaporationRateStep = 0.1;
     private double pheromoneInfluence = 1;
-    private final double minPheromoneInfluence = 0.1;
+    private final double minPheromoneInfluence = 0;
     private final double pheromoneInfluenceStep = 0.1;
     private double heuristicInfluence = 0;
     private int dfsCount = 2;
-    private int maxDepositPaths = 5;
-    private int maxStagnationIterations = 5_000;
+    private int depositPathsLimit;
+    private final int maxDepositPathsLimit = 5;
+    private double depositTolerance = 0.05;
+    private final double maxDepositTolerance = 0.25;
+    private final double depositToleranceStep = 0.001;
+    private final double optSprintDepositMultiplier = 2;
+    private int maxRestarts = 100;
     private int restartInterval = 100;
     private int stagnationThreshold = 10;
     private long timeLimitMs = 15 * 60 * 1000;
@@ -41,16 +48,26 @@ public class LongestInducedPathACO extends GraphAlgorithm implements InducedPath
 
     // --- State ---
     private boolean[][] adjMatrix;
+    private int[][] adjList;
+    private int[] degrees;
     private double[][] pheromoneMatrix;
     volatile Path optGlobalPath;
+    private int optIteration;
+    private long optTime;
     private int iterations;
     private int restarts;
     private volatile long deadlineNanos;
 
     public LongestInducedPathACO(Graph graph) {
         super(graph);
-        this.maxPheromoneLevel = 3.0 * graph.numVertices();
+        this.maxPheromoneLevel = optSprintDepositMultiplier * graph.numVertices();
+        createAdjList();
         createAdjMatrix();
+        this.degrees = graph.degrees();
+        double regularity = computeRegularity();
+        this.depositPathsLimit = Math.min(
+                1 + (int) ((1.0 - regularity) * (graph.numVertices() / 100)),
+                maxDepositPathsLimit);
     }
 
     public void setTimeLimitMs(long ms) {
@@ -141,7 +158,8 @@ public class LongestInducedPathACO extends GraphAlgorithm implements InducedPath
 
         if (outputEnabled) {
             System.out.println("[ProfACO] Tasks: " + tasks.size() + ", Threads: " + threads
-                    + ", n=" + n + ", m=" + graph.numEdges());
+                    + ", n=" + n + ", m=" + graph.numEdges()
+                    + ", depositPathsLimit=" + depositPathsLimit);
         }
 
         try {
@@ -152,7 +170,7 @@ public class LongestInducedPathACO extends GraphAlgorithm implements InducedPath
             int stagnationIts = 0;
             Set<PathKey> iterPathKeys = new HashSet<>();
             List<Path> iterPaths = new ArrayList<>();
-            Set<PathKey> tabuPathKeys = new HashSet<>();
+            Path optSprintPath = new Path(graph, 0);
 
             while (timeLimitMs == 0
                     || (System.nanoTime() - startTime) < 1_000_000L * timeLimitMs) {
@@ -160,9 +178,12 @@ public class LongestInducedPathACO extends GraphAlgorithm implements InducedPath
 
                 List<Future<Path>> futures = new ArrayList<>(tasks.size());
                 for (DFSTask task : tasks) {
-                    futures.add(executor.submit(task));
+                    if (!optGlobalPath.contains(task.startVertex)) {
+                        futures.add(executor.submit(task));
+                    }
                 }
 
+                boolean improvedSprint = false;
                 boolean improvedGlobal = false;
                 iterPaths.clear();
                 iterPathKeys.clear();
@@ -186,40 +207,52 @@ public class LongestInducedPathACO extends GraphAlgorithm implements InducedPath
                     }
                 }
 
-                if (optLocalPath.size() > optGlobalPath.size()) {
-                    optGlobalPath = optLocalPath;
-                    improvedGlobal = true;
+                final int optSprintPathSize = optSprintPath.size();
+                if (optLocalPath.size() > optSprintPathSize) {
+                    optSprintPath = optLocalPath;
+                    improvedSprint = true;
+
+                    if (optLocalPath.size() > optGlobalPath.size()) {
+                        optGlobalPath = optLocalPath;
+                        optIteration = iterations;
+                        optTime = System.nanoTime() - startTime;
+                        improvedGlobal = true;
+                    }
                 }
 
-                if (improvedGlobal) {
-                    if (outputEnabled) {
-                        long elapsed = (System.nanoTime() - startTime) / 1_000_000;
-                        System.out.println("[ProfACO] New best: " + optGlobalPath.size()
-                                + ", iter=" + iterations
-                                + ", evap=" + String.format("%.2f", evaporationRate)
-                                + ", time=" + elapsed + "ms");
-                    }
+                if (improvedSprint) {
                     stagnationIts = 0;
-                    restarts = 0;
                     evaporationRate = minEvaporationRate;
+
+                    if (improvedGlobal) {
+                        restarts = 0;
+                        if (outputEnabled) {
+                            System.out.println("[ProfACO] New best: " + optGlobalPath.size()
+                                    + ", iter=" + iterations
+                                    + ", evap=" + String.format("%.2f", evaporationRate)
+                                    + ", time=" + optTime / 1_000_000 + "ms");
+                        }
+                    }
                 } else {
                     stagnationIts++;
-                    if (maxStagnationIterations > 0
-                            && stagnationIts > maxStagnationIterations) break;
-
                     if (stagnationIts % restartInterval == 0) {
                         restarts++;
-                        if (outputEnabled) {
-                            System.out.println("[ProfACO] Restart #" + restarts
-                                    + " at iter=" + iterations
-                                    + ", evap=" + String.format("%.2f", evaporationRate)
-                                    + ", dfsCount=" + dfsCount);
-                        }
+                        if (maxRestarts > 0 && restarts > maxRestarts) break;
+                        optSprintPath = new Path(graph, 0);
                         resetPheromone();
                         evaporationRate = minEvaporationRate;
-                        int log2restarts = (int) (Math.log(restarts) / Math.log(2.0));
-                        dfsCount = 2 + log2restarts;
-                        tabuPathKeys.add(new PathKey(optGlobalPath));
+                        dfsCount = 2 + (int) (Math.log(restarts) / Math.log(2.0));
+                        if (restarts % 20 == 0) {
+                            depositPathsLimit++;
+                        }
+                        if (outputEnabled) {
+                            System.out.println("[ProfACO] Restart #" + restarts
+                                    + ", iter=" + iterations
+                                    + ", dfsCount=" + dfsCount
+                                    + ", depositTolerance=" + String.format("%.3f", depositTolerance)
+                                    + ", depositLimit=" + depositPathsLimit
+                                    + ", opt=" + optGlobalPath.size());
+                        }
                         continue;
                     } else if (stagnationIts % stagnationThreshold == 0) {
                         evaporationRate = Math.min(evaporationRate + evaporationRateStep, maxEvaporationRate);
@@ -228,14 +261,26 @@ public class LongestInducedPathACO extends GraphAlgorithm implements InducedPath
 
                 evaporatePheromone();
 
-                if (improvedGlobal) {
-                    depositPheromone(optGlobalPath, 2);
+                if (improvedSprint) {
+                    depositPheromone(optSprintPath, optSprintDepositMultiplier);
                 } else {
+                    List<Path> eligibleToDeposit = new ArrayList<>();
                     iterPaths.stream()
+                            .filter(p -> p.size() >= (1 - depositTolerance) * optSprintPathSize)
                             .sorted(Comparator.comparingInt(Path::size).reversed())
-                            .filter(p -> !tabuPathKeys.contains(new PathKey(p)))
-                            .limit(maxDepositPaths)
-                            .forEach(p -> depositPheromone(p, 1));
+                            .limit(depositPathsLimit)
+                            .forEach(eligibleToDeposit::add);
+
+                    if (eligibleToDeposit.isEmpty()) {
+                        if (depositTolerance < maxDepositTolerance) {
+                            depositTolerance += depositToleranceStep;
+                        }
+                        eligibleToDeposit.add(optGlobalPath);
+                    }
+                    for (Path p : eligibleToDeposit) {
+                        double factor = (double) p.size() / optGlobalPath.size();
+                        depositPheromone(p, factor);
+                    }
                 }
             }
         } catch (InterruptedException ex) {
@@ -248,7 +293,9 @@ public class LongestInducedPathACO extends GraphAlgorithm implements InducedPath
         }
 
         if (outputEnabled) {
-            System.out.println("[ProfACO] Final: " + optGlobalPath.size());
+            System.out.println("[ProfACO] Final: " + optGlobalPath.size()
+                    + ", foundAtIter=" + optIteration
+                    + ", foundAtTime=" + optTime / 1_000_000 + "ms");
         }
         return optGlobalPath;
     }
@@ -272,7 +319,35 @@ public class LongestInducedPathACO extends GraphAlgorithm implements InducedPath
         }
     }
 
-    // --- Adjacency matrix ---
+    // avg degree / standard deviation: 1 = regular graph, 0 = highly irregular graph
+    private double computeRegularity() {
+        int n = graph.numVertices();
+        if (n == 0) {
+            return 1.0;
+        }
+        double avgDegree = 2.0 * graph.numEdges() / n;
+        if (avgDegree == 0) {
+            return 1.0;
+        }
+        double variance = 0.0;
+        for (int v : graph.vertices()) {
+            double diff = graph.degree(v) - avgDegree;
+            variance += diff * diff;
+        }
+        variance /= n;
+        double stdDev = Math.sqrt(variance);
+        return Math.max(0.0, 1.0 - stdDev / avgDegree);
+    }
+
+    // --- Adjacency structures ---
+    private void createAdjList() {
+        int n = graph.numVertices();
+        adjList = new int[n][];
+        for (int v : graph.vertices()) {
+            adjList[graph.indexOf(v)] = graph.neighbors(v);
+        }
+    }
+
     private void createAdjMatrix() {
         int n = graph.numVertices();
         long maxMemory = Runtime.getRuntime().maxMemory();
@@ -376,6 +451,7 @@ public class LongestInducedPathACO extends GraphAlgorithm implements InducedPath
         }
 
         private Path dfs(int start) {
+            int n = graph.numVertices();
             Path workPath = new Path(graph);
             Path bestPath = new Path(graph, 0);
 
@@ -386,15 +462,24 @@ public class LongestInducedPathACO extends GraphAlgorithm implements InducedPath
             visited[si] = true;
             workPath.add(start);
             updateInvalidCount(start, +1);
+            int visitedCount = 1;
 
             boolean forward = true;
             while (workPath.size() > 0) {
                 if (System.nanoTime() > deadlineNanos) break;
-                int v = workPath.get(workPath.size() - 1);
+
+                int workPathSize = workPath.size();
+                int maxPathSize = workPathSize + (n - visitedCount);
+                if (maxPathSize < bestPath.size()
+                        || maxPathSize < (1 - depositTolerance) * optGlobalPath.size()) {
+                    break;
+                }
+
+                int v = workPath.get(workPathSize - 1);
+                int vi = graph.indexOf(v);
 
                 int cnt = 0;
-                for (var it = graph.neighborIterator(v); it.hasNext(); ) {
-                    int u = it.next();
+                for (int u : adjList[vi]) {
                     int ui = graph.indexOf(u);
                     if (!visited[ui] && invalidCount[ui] == 1) {
                         candidateBuf[cnt++] = u;
@@ -407,24 +492,17 @@ public class LongestInducedPathACO extends GraphAlgorithm implements InducedPath
                     visited[ui] = true;
                     workPath.add(u);
                     updateInvalidCount(u, +1);
+                    visitedCount++;
                     forward = true;
                 } else {
-                    int workPathSize = workPath.size();
                     if (forward) {
                         forward = false;
                         if (bestPath.size() < workPathSize) {
                             bestPath = copyPath(workPath);
                         }
                     }
-                    if (restarts > 0) {
-                        int optSize = optGlobalPath.size();
-                        double bktProb = optSize == 0 ? 0 : Math.exp(-0.1 * (optSize - workPathSize));
-                        if (rng.nextDouble() < bktProb) {
-                            visited[graph.indexOf(workPath.get(workPathSize - 1))] = false;
-                        }
-                    }
-                    int removed = workPath.get(workPath.size() - 1);
-                    workPath.removeFromPos(workPath.size() - 1);
+                    int removed = workPath.get(workPathSize - 1);
+                    workPath.removeFromPos(workPathSize - 1);
                     updateInvalidCount(removed, -1);
                 }
             }
@@ -432,9 +510,10 @@ public class LongestInducedPathACO extends GraphAlgorithm implements InducedPath
         }
 
         private void updateInvalidCount(int v, int delta) {
-            invalidCount[graph.indexOf(v)] += delta;
-            for (var it = graph.neighborIterator(v); it.hasNext(); ) {
-                invalidCount[graph.indexOf(it.next())] += delta;
+            int vi = graph.indexOf(v);
+            invalidCount[vi] += delta;
+            for (int u : adjList[vi]) {
+                invalidCount[graph.indexOf(u)] += delta;
             }
         }
 
@@ -448,7 +527,8 @@ public class LongestInducedPathACO extends GraphAlgorithm implements InducedPath
                 int u = candidateBuf[i];
                 weight[i] = Math.pow(getPheromone(v, u), localPheromoneInfluence);
                 if (heuristicInfluence > 0) {
-                    weight[i] *= Math.pow(forwardCheck(u), heuristicInfluence);
+                    double heuristicValue = 1 + 1.0 / degrees[graph.indexOf(u)];
+                    weight[i] *= Math.pow(heuristicValue, heuristicInfluence);
                 }
                 totalWeight += weight[i];
             }
@@ -462,18 +542,6 @@ public class LongestInducedPathACO extends GraphAlgorithm implements InducedPath
                 }
             }
             return candidateBuf[cnt - 1];
-        }
-
-        private double forwardCheck(int u) {
-            int count = 0;
-            for (var it = graph.neighborIterator(u); it.hasNext(); ) {
-                int w = it.next();
-                int wi = graph.indexOf(w);
-                if (!visited[wi] && invalidCount[wi] == 0) {
-                    count++;
-                }
-            }
-            return count;
         }
 
         private Path copyPath(Path src) {
